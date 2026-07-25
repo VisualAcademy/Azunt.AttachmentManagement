@@ -1,0 +1,11 @@
+html, body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f5f7fa; }
+.page-shell { min-height: 100vh; display: grid; grid-template-columns: 220px 1fr; }
+.sidebar { background: #1f2937; min-height: 100vh; }
+.sidebar .nav-link { color: #d1d5db; border-radius: .4rem; margin-bottom: .25rem; }
+.sidebar .nav-link:hover, .sidebar .nav-link.active { color: white; background: #374151; }
+.content { padding: 2rem; min-width: 0; }
+.notes-cell { max-width: 300px; }
+.modal-backdrop-custom { position: fixed; inset: 0; z-index: 1050; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0,0,0,.55); }
+.modal-card { width: min(520px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; background: white; border-radius: .75rem; padding: 1.5rem; box-shadow: 0 1rem 3rem rgba(0,0,0,.25); }
+.modal-card-lg { width: min(900px, 100%); }
+@media (max-width: 800px) { .page-shell { grid-template-columns: 1fr; } .sidebar { min-height: auto; } .content { padding: 1rem; } }

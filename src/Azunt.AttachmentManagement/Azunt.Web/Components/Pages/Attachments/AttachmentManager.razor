@@ -1,0 +1,383 @@
+@page "/Attachments"
+@page "/Attachments/Manage"
+@rendermode InteractiveServer
+@inject IAttachmentRepository Repository
+@inject NavigationManager Navigation
+
+<PageTitle>Attachments</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h1 class="mb-0">Attachments</h1>
+        <div class="text-muted">Reusable attachment metadata for related business records</div>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary" @onclick="CreateNew">Add New</button>
+        <button class="btn btn-outline-success" @onclick="ExportExcel">Excel Export</button>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-lg-4">
+                <label class="form-label">Search</label>
+                <input class="form-control" @bind="searchQuery" @bind:event="oninput" placeholder="File name, category, notes, creator..." />
+            </div>
+            <div class="col-sm-4 col-lg-2">
+                <label class="form-label">Employee ID</label>
+                <InputNumber class="form-control" @bind-Value="employeeId" />
+            </div>
+            <div class="col-sm-4 col-lg-2">
+                <label class="form-label">Vendor ID</label>
+                <InputNumber class="form-control" @bind-Value="vendorId" />
+            </div>
+            <div class="col-sm-4 col-lg-2">
+                <label class="form-label">Investigation ID</label>
+                <InputNumber class="form-control" @bind-Value="investigationId" />
+            </div>
+            <div class="col-lg-2">
+                <div class="form-check mb-2">
+                    <InputCheckbox class="form-check-input" @bind-Value="activeOnly" />
+                    <label class="form-check-label">Active only</label>
+                </div>
+                <button class="btn btn-outline-primary w-100" @onclick="ApplyFilters">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info py-2">@statusMessage</div>
+}
+
+@if (loading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle bg-white">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.FileName))">File name @SortMark(nameof(AttachmentRecord.FileName))</th>
+                    <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.Category))">Category @SortMark(nameof(AttachmentRecord.Category))</th>
+                    <th>Employee</th>
+                    <th>Vendor</th>
+                    <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.InvestigationId))">Investigation @SortMark(nameof(AttachmentRecord.InvestigationId))</th>
+                    <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.CreatedAt))">Created @SortMark(nameof(AttachmentRecord.CreatedAt))</th>
+                    <th>Active</th>
+                    <th class="text-nowrap">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (models.Count == 0)
+                {
+                    <tr><td colspan="9" class="text-center text-muted py-4">No attachment records.</td></tr>
+                }
+                else
+                {
+                    @foreach (var item in models)
+                    {
+                        <tr>
+                            <td>@item.Id</td>
+                            <td>
+                                <strong>@(item.FileName ?? "(no file name)")</strong>
+                                @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                {
+                                    <div class="small text-muted text-truncate notes-cell" title="@item.Notes">@item.Notes</div>
+                                }
+                            </td>
+                            <td>@item.Category</td>
+                            <td>@item.EmployeeId</td>
+                            <td>@item.VendorId</td>
+                            <td>@item.InvestigationId</td>
+                            <td class="text-nowrap">@FormatDate(item.EffectiveCreatedAt)</td>
+                            <td><span class="badge @(item.EffectiveActive ? "text-bg-success" : "text-bg-secondary")">@(item.EffectiveActive ? "Active" : "Inactive")</span></td>
+                            <td class="text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(item)">Edit</button>
+                                <button class="btn btn-sm btn-outline-warning" @onclick="() => ToggleActive(item)">Toggle</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(item)">Delete</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="text-muted">@totalCount record(s), page @(pageIndex + 1) of @TotalPages</div>
+        <div class="btn-group">
+            <button class="btn btn-outline-secondary" disabled="@(pageIndex == 0)" @onclick="PreviousPage">Previous</button>
+            <button class="btn btn-outline-secondary" disabled="@(pageIndex + 1 >= TotalPages)" @onclick="NextPage">Next</button>
+        </div>
+    </div>
+}
+
+@if (showEditor)
+{
+    <div class="modal-backdrop-custom">
+        <div class="modal-card modal-card-lg">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="mb-0">@(editModel.Id == 0 ? "Create Attachment" : "Edit Attachment")</h3>
+                <button class="btn-close" @onclick="CloseEditor"></button>
+            </div>
+
+            <EditForm Model="editModel" OnValidSubmit="Save">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger" />
+
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label">File name</label>
+                        <InputText class="form-control" @bind-Value="editModel.FileName" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Category</label>
+                        <InputText class="form-control" @bind-Value="editModel.Category" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Employee ID</label>
+                        <InputNumber class="form-control" @bind-Value="editModel.EmployeeId" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Vendor ID</label>
+                        <InputNumber class="form-control" @bind-Value="editModel.VendorId" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Investigation ID</label>
+                        <InputNumber class="form-control" @bind-Value="editModel.InvestigationId" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Created by</label>
+                        <InputText class="form-control" @bind-Value="editModel.CreatedBy" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Discriminator</label>
+                        <InputText class="form-control" @bind-Value="editModel.Discriminator" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Notes</label>
+                        <InputTextArea class="form-control" rows="4" @bind-Value="editModel.Notes" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">CreatedAt</label>
+                        <input class="form-control" value="@FormatDate(editModel.CreatedAt)" disabled />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">DateCreated</label>
+                        <input class="form-control" value="@FormatDate(editModel.DateCreated)" disabled />
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <InputCheckbox class="form-check-input" @bind-Value="editActive" />
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditor">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (deleteModel is not null)
+{
+    <div class="modal-backdrop-custom">
+        <div class="modal-card">
+            <h3>Delete Attachment</h3>
+            <p>Delete <strong>@(deleteModel.FileName ?? $"Attachment #{deleteModel.Id}")</strong>?</p>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                <button class="btn btn-danger" @onclick="DeleteConfirmed">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly int pageSize = 10;
+    private List<AttachmentRecord> models = new();
+    private AttachmentRecord editModel = new();
+    private AttachmentRecord? deleteModel;
+    private bool editActive = true;
+    private bool showEditor;
+    private bool loading = true;
+    private bool activeOnly;
+    private string searchQuery = string.Empty;
+    private string sortOrder = string.Empty;
+    private string statusMessage = string.Empty;
+    private long? employeeId;
+    private long? vendorId;
+    private long? investigationId;
+    private int pageIndex;
+    private long totalCount;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        var result = await Repository.GetPagedAsync(new AttachmentFilterOptions
+        {
+            PageIndex = pageIndex,
+            PageSize = pageSize,
+            SearchQuery = searchQuery,
+            SortOrder = sortOrder,
+            EmployeeId = employeeId,
+            VendorId = vendorId,
+            InvestigationId = investigationId,
+            ActiveOnly = activeOnly
+        });
+
+        models = result.Items.ToList();
+        totalCount = result.TotalCount;
+
+        if (pageIndex >= TotalPages)
+        {
+            pageIndex = Math.Max(0, TotalPages - 1);
+        }
+
+        loading = false;
+    }
+
+    private async Task ApplyFilters()
+    {
+        pageIndex = 0;
+        await LoadAsync();
+    }
+
+    private void CreateNew()
+    {
+        editModel = new AttachmentRecord
+        {
+            Active = true,
+            CreatedBy = "Sample User"
+        };
+        editActive = true;
+        showEditor = true;
+    }
+
+    private void Edit(AttachmentRecord item)
+    {
+        editModel = Clone(item);
+        editActive = item.EffectiveActive;
+        showEditor = true;
+    }
+
+    private void CloseEditor()
+    {
+        showEditor = false;
+        editModel = new AttachmentRecord();
+    }
+
+    private async Task Save()
+    {
+        editModel.Active = editActive;
+
+        if (editModel.Id == 0)
+        {
+            await Repository.AddAsync(editModel);
+            statusMessage = "Attachment created.";
+        }
+        else
+        {
+            await Repository.UpdateAsync(editModel);
+            statusMessage = "Attachment updated.";
+        }
+
+        showEditor = false;
+        await LoadAsync();
+    }
+
+    private async Task ToggleActive(AttachmentRecord item)
+    {
+        var model = Clone(item);
+        model.Active = !item.EffectiveActive;
+        await Repository.UpdateAsync(model);
+        statusMessage = $"Attachment #{item.Id} active state changed.";
+        await LoadAsync();
+    }
+
+    private void AskDelete(AttachmentRecord item) => deleteModel = item;
+    private void CancelDelete() => deleteModel = null;
+
+    private async Task DeleteConfirmed()
+    {
+        if (deleteModel is not null)
+        {
+            await Repository.DeleteAsync(deleteModel.Id);
+            statusMessage = $"Attachment #{deleteModel.Id} deleted.";
+            deleteModel = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task SortBy(string column)
+    {
+        sortOrder = sortOrder switch
+        {
+            var current when current == column => column + "Desc",
+            var current when current == column + "Desc" => string.Empty,
+            _ => column
+        };
+        await LoadAsync();
+    }
+
+    private string SortMark(string column) => sortOrder switch
+    {
+        var current when current == column => "▲",
+        var current when current == column + "Desc" => "▼",
+        _ => string.Empty
+    };
+
+    private async Task PreviousPage()
+    {
+        if (pageIndex > 0)
+        {
+            pageIndex--;
+            await LoadAsync();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (pageIndex + 1 < TotalPages)
+        {
+            pageIndex++;
+            await LoadAsync();
+        }
+    }
+
+    private void ExportExcel()
+        => Navigation.NavigateTo("/api/attachment-export/excel", forceLoad: true);
+
+    private static string FormatDate(DateTimeOffset? value)
+        => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? string.Empty;
+
+    private static AttachmentRecord Clone(AttachmentRecord source) => new()
+    {
+        Id = source.Id,
+        Active = source.Active,
+        DateCreated = source.DateCreated,
+        CreatedAt = source.CreatedAt,
+        CreatedBy = source.CreatedBy,
+        EmployeeId = source.EmployeeId,
+        VendorId = source.VendorId,
+        InvestigationId = source.InvestigationId,
+        FileName = source.FileName,
+        Discriminator = source.Discriminator,
+        Category = source.Category,
+        Notes = source.Notes
+    };
+}
