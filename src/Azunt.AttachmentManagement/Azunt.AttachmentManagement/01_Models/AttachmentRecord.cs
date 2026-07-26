@@ -4,8 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Azunt.AttachmentManagement;
 
 /// <summary>
-/// Unified model for the dbo.Attachments table used by employee, vendor,
-/// investigation, and future entity attachment scenarios.
+/// Represents attachment metadata stored in dbo.Attachments.
+/// The model supports legacy creation columns and optional audit metadata.
 /// </summary>
 [Table("Attachments")]
 public class AttachmentRecord
@@ -23,6 +23,11 @@ public class AttachmentRecord
 
     [StringLength(70)]
     public string? CreatedBy { get; set; }
+
+    public DateTimeOffset? ModifiedAt { get; set; }
+
+    [StringLength(70)]
+    public string? ModifiedBy { get; set; }
 
     [Column("EmployeeID")]
     public long? EmployeeId { get; set; }
@@ -44,6 +49,9 @@ public class AttachmentRecord
 
     [NotMapped]
     public DateTimeOffset? EffectiveCreatedAt => CreatedAt ?? DateCreated;
+
+    [NotMapped]
+    public DateTimeOffset? EffectiveUpdatedAt => ModifiedAt ?? EffectiveCreatedAt;
 
     [NotMapped]
     public bool EffectiveActive => Active != false;

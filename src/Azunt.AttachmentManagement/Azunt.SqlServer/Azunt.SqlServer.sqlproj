@@ -64,5 +64,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Scripts\EnhanceExistingAttachments.sql" />
+    <None Include="Scripts\EnsureAttachmentIndexes.sql" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,6 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-using System.Text;
 
 namespace Azunt.AttachmentManagement;
 
@@ -9,6 +8,7 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
 {
     private const string Columns = """
         ID AS Id, Active, DateCreated, CreatedAt, CreatedBy,
+        ModifiedAt, ModifiedBy,
         EmployeeID AS EmployeeId, VendorID AS VendorId,
         InvestigationID AS InvestigationId, FileName,
         Discriminator, Category, Notes
@@ -34,6 +34,8 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
         AttachmentRecord model,
         string? connectionString = null)
     {
+        ArgumentNullException.ThrowIfNull(model);
+
         var now = DateTimeOffset.UtcNow;
         model.Active ??= true;
         model.CreatedAt ??= now;
@@ -43,6 +45,7 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
             INSERT INTO dbo.Attachments
             (
                 Active, DateCreated, CreatedAt, CreatedBy,
+                ModifiedAt, ModifiedBy,
                 EmployeeID, VendorID, InvestigationID,
                 FileName, Discriminator, Category, Notes
             )
@@ -50,6 +53,7 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
             VALUES
             (
                 @Active, @DateCreated, @CreatedAt, @CreatedBy,
+                @ModifiedAt, @ModifiedBy,
                 @EmployeeId, @VendorId, @InvestigationId,
                 @FileName, @Discriminator, @Category, @Notes
             );
@@ -79,12 +83,15 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
 
     public async Task<bool> UpdateAsync(AttachmentRecord model, string? connectionString = null)
     {
+        ArgumentNullException.ThrowIfNull(model);
+
+        model.ModifiedAt = DateTimeOffset.UtcNow;
+
         const string sql = """
             UPDATE dbo.Attachments SET
                 Active = @Active,
-                DateCreated = @DateCreated,
-                CreatedAt = @CreatedAt,
-                CreatedBy = @CreatedBy,
+                ModifiedAt = @ModifiedAt,
+                ModifiedBy = COALESCE(NULLIF(@ModifiedBy, N''), ModifiedBy),
                 EmployeeID = @EmployeeId,
                 VendorID = @VendorId,
                 InvestigationID = @InvestigationId,
@@ -96,7 +103,17 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
             """;
 
         await using var connection = CreateConnection(connectionString);
-        return await connection.ExecuteAsync(sql, model) > 0;
+        var changed = await connection.ExecuteAsync(sql, model) > 0;
+
+        if (changed)
+        {
+            _logger.LogInformation(
+                "Attachment {AttachmentId} updated through Dapper by {ModifiedBy}.",
+                model.Id,
+                model.ModifiedBy);
+        }
+
+        return changed;
     }
 
     public async Task<bool> UpdateMetadataAsync(
@@ -112,14 +129,33 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
                 InvestigationID = @InvestigationId,
                 Category = @Category,
                 Notes = @Notes,
-                CreatedBy = COALESCE(@ModifiedBy, CreatedBy)
+                ModifiedAt = @ModifiedAt,
+                ModifiedBy = COALESCE(NULLIF(@ModifiedBy, N''), ModifiedBy)
             WHERE ID = @Id;
             """;
 
         await using var connection = CreateConnection(connectionString);
-        return await connection.ExecuteAsync(
+        var changed = await connection.ExecuteAsync(
             sql,
-            new { Id = id, InvestigationId = investigationId, Category = category, Notes = notes, ModifiedBy = modifiedBy }) > 0;
+            new
+            {
+                Id = id,
+                InvestigationId = investigationId,
+                Category = category,
+                Notes = notes,
+                ModifiedAt = DateTimeOffset.UtcNow,
+                ModifiedBy = modifiedBy
+            }) > 0;
+
+        if (changed)
+        {
+            _logger.LogInformation(
+                "Attachment {AttachmentId} metadata updated through Dapper by {ModifiedBy}.",
+                id,
+                modifiedBy);
+        }
+
+        return changed;
     }
 
     public async Task<bool> DeleteAsync(long id, string? connectionString = null)
@@ -145,6 +181,8 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
         AttachmentFilterOptions options,
         string? connectionString = null)
     {
+        ArgumentNullException.ThrowIfNull(options);
+
         var where = new List<string>();
         var parameters = new DynamicParameters();
 
@@ -173,8 +211,25 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
 
         if (!string.IsNullOrWhiteSpace(options.SearchQuery))
         {
-            parameters.Add("Search", $"%{options.SearchQuery.Trim()}%");
-            where.Add("(FileName LIKE @Search OR Category LIKE @Search OR Notes LIKE @Search OR CreatedBy LIKE @Search OR Discriminator LIKE @Search)");
+            var keyword = options.SearchQuery.Trim();
+            parameters.Add("Search", $"%{keyword}%");
+
+            var search = """
+                (FileName LIKE @Search
+                 OR Category LIKE @Search
+                 OR Notes LIKE @Search
+                 OR CreatedBy LIKE @Search
+                 OR ModifiedBy LIKE @Search
+                 OR Discriminator LIKE @Search)
+                """;
+
+            if (long.TryParse(keyword, out var numericId))
+            {
+                parameters.Add("NumericId", numericId);
+                search = $"({search} OR ID = @NumericId OR EmployeeID = @NumericId OR VendorID = @NumericId OR InvestigationID = @NumericId)";
+            }
+
+            where.Add(search);
         }
 
         var whereSql = where.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", where);
@@ -207,6 +262,8 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
         "CategoryDesc" => "Category DESC",
         "CreatedAt" => "COALESCE(CreatedAt, DateCreated) ASC",
         "CreatedAtDesc" => "COALESCE(CreatedAt, DateCreated) DESC",
+        "ModifiedAt" => "ModifiedAt ASC",
+        "ModifiedAtDesc" => "ModifiedAt DESC",
         "InvestigationId" => "InvestigationID ASC",
         "InvestigationIdDesc" => "InvestigationID DESC",
         "Active" => "Active ASC",

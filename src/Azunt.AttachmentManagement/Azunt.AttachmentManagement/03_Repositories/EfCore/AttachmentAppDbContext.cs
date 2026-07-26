@@ -26,6 +26,8 @@ public class AttachmentAppDbContext : DbContext
         entity.Property(m => m.DateCreated).HasColumnName("DateCreated");
         entity.Property(m => m.CreatedAt).HasColumnName("CreatedAt");
         entity.Property(m => m.CreatedBy).HasColumnName("CreatedBy").HasMaxLength(70);
+        entity.Property(m => m.ModifiedAt).HasColumnName("ModifiedAt");
+        entity.Property(m => m.ModifiedBy).HasColumnName("ModifiedBy").HasMaxLength(70);
         entity.Property(m => m.EmployeeId).HasColumnName("EmployeeID");
         entity.Property(m => m.VendorId).HasColumnName("VendorID");
         entity.Property(m => m.InvestigationId).HasColumnName("InvestigationID");

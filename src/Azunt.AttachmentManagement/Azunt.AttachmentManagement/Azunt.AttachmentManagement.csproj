@@ -3,31 +3,49 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <VersionPrefix>1.0.0</VersionPrefix>
+
+    <PackageId>Azunt.AttachmentManagement</PackageId>
+    <Version>1.0.0</Version>
     <Title>Azunt.AttachmentManagement</Title>
-    <Description>Reusable .NET attachment metadata CRUD module for general business applications. Supports EF Core In-Memory, SQL Server, Dapper, ADO.NET, safe schema enhancement, related-record metadata, and Open XML Excel export.</Description>
-    <PackageTags>Azunt;attachment;file;investigation;employee;vendor;EFCore;InMemory;Dapper;ADO.NET;Blazor;SQLServer;OpenXML</PackageTags>
+    <Description>Reusable .NET attachment metadata CRUD module for general business applications. Supports EF Core In-Memory, SQL Server, Dapper, ADO.NET, safe schema enhancement, audit metadata, related-record metadata, and Open XML Excel export.</Description>
+    <PackageTags>Azunt;attachment;file;metadata;audit;investigation;employee;vendor;EFCore;InMemory;Dapper;ADO.NET;Blazor;SQLServer;OpenXML</PackageTags>
     <Authors>VisualAcademy</Authors>
     <Company>Hawaso</Company>
+    <Copyright>Copyright © 2026 VisualAcademy</Copyright>
+
     <PackageProjectUrl>https://github.com/VisualAcademy/Azunt.AttachmentManagement</PackageProjectUrl>
     <RepositoryUrl>https://github.com/VisualAcademy/Azunt.AttachmentManagement</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <Copyright>Copyright © 2026 VisualAcademy</Copyright>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>Initial public release with attachment metadata CRUD, audit fields, EF Core, Dapper, ADO.NET, SQL Server schema enhancement, Blazor demo, and Open XML Excel export.</PackageReleaseNotes>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.66" />
-    <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.12" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.12" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.12" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.6" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.22" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.22" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.22" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="..\..\..\README.md" Pack="true" PackagePath="" />
     <None Include="..\..\..\LICENSE" Pack="true" PackagePath="" />
+    <None Include="..\..\..\CHANGELOG.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>

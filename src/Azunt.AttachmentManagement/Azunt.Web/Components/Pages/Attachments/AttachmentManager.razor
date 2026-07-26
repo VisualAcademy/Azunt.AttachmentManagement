@@ -22,7 +22,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-lg-4">
                 <label class="form-label">Search</label>
-                <input class="form-control" @bind="searchQuery" @bind:event="oninput" placeholder="File name, category, notes, creator..." />
+                <input class="form-control" @bind="searchQuery" @bind:event="oninput" placeholder="File name, category, notes, creator, modifier..." />
             </div>
             <div class="col-sm-4 col-lg-2">
                 <label class="form-label">Employee ID</label>
@@ -69,6 +69,7 @@ else
                     <th>Vendor</th>
                     <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.InvestigationId))">Investigation @SortMark(nameof(AttachmentRecord.InvestigationId))</th>
                     <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.CreatedAt))">Created @SortMark(nameof(AttachmentRecord.CreatedAt))</th>
+                    <th role="button" @onclick="() => SortBy(nameof(AttachmentRecord.ModifiedAt))">Modified @SortMark(nameof(AttachmentRecord.ModifiedAt))</th>
                     <th>Active</th>
                     <th class="text-nowrap">Actions</th>
                 </tr>
@@ -76,7 +77,7 @@ else
             <tbody>
                 @if (models.Count == 0)
                 {
-                    <tr><td colspan="9" class="text-center text-muted py-4">No attachment records.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted py-4">No attachment records.</td></tr>
                 }
                 else
                 {
@@ -96,6 +97,13 @@ else
                             <td>@item.VendorId</td>
                             <td>@item.InvestigationId</td>
                             <td class="text-nowrap">@FormatDate(item.EffectiveCreatedAt)</td>
+                            <td class="text-nowrap">
+                                @FormatDate(item.ModifiedAt)
+                                @if (!string.IsNullOrWhiteSpace(item.ModifiedBy))
+                                {
+                                    <div class="small text-muted">@item.ModifiedBy</div>
+                                }
+                            </td>
                             <td><span class="badge @(item.EffectiveActive ? "text-bg-success" : "text-bg-secondary")">@(item.EffectiveActive ? "Active" : "Inactive")</span></td>
                             <td class="text-nowrap">
                                 <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(item)">Edit</button>
@@ -154,7 +162,11 @@ else
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Created by</label>
-                        <InputText class="form-control" @bind-Value="editModel.CreatedBy" />
+                        <InputText class="form-control" @bind-Value="editModel.CreatedBy" disabled="@(editModel.Id != 0)" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Modified by</label>
+                        <InputText class="form-control" @bind-Value="editModel.ModifiedBy" placeholder="Editor name" disabled="@(editModel.Id == 0)" />
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Discriminator</label>
@@ -171,6 +183,10 @@ else
                     <div class="col-md-6">
                         <label class="form-label">DateCreated</label>
                         <input class="form-control" value="@FormatDate(editModel.DateCreated)" disabled />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">ModifiedAt</label>
+                        <input class="form-control" value="@FormatDate(editModel.ModifiedAt)" disabled />
                     </div>
                     <div class="col-12">
                         <div class="form-check">
@@ -292,6 +308,9 @@ else
         }
         else
         {
+            editModel.ModifiedBy = string.IsNullOrWhiteSpace(editModel.ModifiedBy)
+                ? "Sample User"
+                : editModel.ModifiedBy;
             await Repository.UpdateAsync(editModel);
             statusMessage = "Attachment updated.";
         }
@@ -304,6 +323,7 @@ else
     {
         var model = Clone(item);
         model.Active = !item.EffectiveActive;
+        model.ModifiedBy = "Sample User";
         await Repository.UpdateAsync(model);
         statusMessage = $"Attachment #{item.Id} active state changed.";
         await LoadAsync();
@@ -372,6 +392,8 @@ else
         DateCreated = source.DateCreated,
         CreatedAt = source.CreatedAt,
         CreatedBy = source.CreatedBy,
+        ModifiedAt = source.ModifiedAt,
+        ModifiedBy = source.ModifiedBy,
         EmployeeId = source.EmployeeId,
         VendorId = source.VendorId,
         InvestigationId = source.InvestigationId,

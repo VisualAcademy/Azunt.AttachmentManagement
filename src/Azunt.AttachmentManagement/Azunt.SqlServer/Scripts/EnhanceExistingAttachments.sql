@@ -17,6 +17,12 @@ GO
 IF COL_LENGTH('dbo.Attachments', 'CreatedBy') IS NULL
     ALTER TABLE [dbo].[Attachments] ADD [CreatedBy] NVARCHAR(70) NULL;
 GO
+IF COL_LENGTH('dbo.Attachments', 'ModifiedAt') IS NULL
+    ALTER TABLE [dbo].[Attachments] ADD [ModifiedAt] DATETIMEOFFSET(7) NULL;
+GO
+IF COL_LENGTH('dbo.Attachments', 'ModifiedBy') IS NULL
+    ALTER TABLE [dbo].[Attachments] ADD [ModifiedBy] NVARCHAR(70) NULL;
+GO
 IF COL_LENGTH('dbo.Attachments', 'EmployeeID') IS NULL
     ALTER TABLE [dbo].[Attachments] ADD [EmployeeID] BIGINT NULL;
 GO
@@ -37,14 +43,4 @@ IF COL_LENGTH('dbo.Attachments', 'Category') IS NULL
 GO
 IF COL_LENGTH('dbo.Attachments', 'Notes') IS NULL
     ALTER TABLE [dbo].[Attachments] ADD [Notes] NVARCHAR(MAX) NULL;
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = 'IX_Attachments_EmployeeID' AND [object_id] = OBJECT_ID(N'dbo.Attachments'))
-    CREATE NONCLUSTERED INDEX [IX_Attachments_EmployeeID] ON [dbo].[Attachments] ([EmployeeID]);
-GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = 'IX_Attachments_VendorID' AND [object_id] = OBJECT_ID(N'dbo.Attachments'))
-    CREATE NONCLUSTERED INDEX [IX_Attachments_VendorID] ON [dbo].[Attachments] ([VendorID]);
-GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = 'IX_Attachments_InvestigationID' AND [object_id] = OBJECT_ID(N'dbo.Attachments'))
-    CREATE NONCLUSTERED INDEX [IX_Attachments_InvestigationID] ON [dbo].[Attachments] ([InvestigationID]);
 GO

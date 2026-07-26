@@ -79,9 +79,6 @@ public sealed class AttachmentRepository : IAttachmentRepository
         }
 
         entity.Active = model.Active;
-        entity.DateCreated = model.DateCreated ?? entity.DateCreated;
-        entity.CreatedAt = model.CreatedAt ?? entity.CreatedAt;
-        entity.CreatedBy = model.CreatedBy;
         entity.EmployeeId = model.EmployeeId;
         entity.VendorId = model.VendorId;
         entity.InvestigationId = model.InvestigationId;
@@ -89,12 +86,19 @@ public sealed class AttachmentRepository : IAttachmentRepository
         entity.Discriminator = model.Discriminator;
         entity.Category = model.Category;
         entity.Notes = model.Notes;
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
+        entity.ModifiedBy = string.IsNullOrWhiteSpace(model.ModifiedBy)
+            ? entity.ModifiedBy
+            : model.ModifiedBy;
 
         var changed = await context.SaveChangesAsync() > 0;
 
         if (changed)
         {
-            _logger.LogInformation("Attachment {AttachmentId} updated.", model.Id);
+            _logger.LogInformation(
+                "Attachment {AttachmentId} updated by {ModifiedBy}.",
+                model.Id,
+                entity.ModifiedBy);
         }
 
         return changed;
@@ -119,9 +123,22 @@ public sealed class AttachmentRepository : IAttachmentRepository
         entity.InvestigationId = investigationId;
         entity.Category = category;
         entity.Notes = notes;
-        entity.CreatedBy = modifiedBy ?? entity.CreatedBy;
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
+        entity.ModifiedBy = string.IsNullOrWhiteSpace(modifiedBy)
+            ? entity.ModifiedBy
+            : modifiedBy;
 
-        return await context.SaveChangesAsync() > 0;
+        var changed = await context.SaveChangesAsync() > 0;
+
+        if (changed)
+        {
+            _logger.LogInformation(
+                "Attachment {AttachmentId} metadata updated by {ModifiedBy}.",
+                id,
+                entity.ModifiedBy);
+        }
+
+        return changed;
     }
 
     public async Task<bool> DeleteAsync(long id, string? connectionString = null)
@@ -216,6 +233,7 @@ public sealed class AttachmentRepository : IAttachmentRepository
                 (m.Category != null && m.Category.Contains(keyword)) ||
                 (m.Notes != null && m.Notes.Contains(keyword)) ||
                 (m.CreatedBy != null && m.CreatedBy.Contains(keyword)) ||
+                (m.ModifiedBy != null && m.ModifiedBy.Contains(keyword)) ||
                 (m.Discriminator != null && m.Discriminator.Contains(keyword)) ||
                 (numeric && (m.Id == numericId ||
                              m.EmployeeId == numericId ||
@@ -238,6 +256,8 @@ public sealed class AttachmentRepository : IAttachmentRepository
             "CategoryDesc" => query.OrderByDescending(m => m.Category),
             "CreatedAt" => query.OrderBy(m => m.CreatedAt ?? m.DateCreated),
             "CreatedAtDesc" => query.OrderByDescending(m => m.CreatedAt ?? m.DateCreated),
+            "ModifiedAt" => query.OrderBy(m => m.ModifiedAt),
+            "ModifiedAtDesc" => query.OrderByDescending(m => m.ModifiedAt),
             "InvestigationId" => query.OrderBy(m => m.InvestigationId),
             "InvestigationIdDesc" => query.OrderByDescending(m => m.InvestigationId),
             "Active" => query.OrderBy(m => m.Active),

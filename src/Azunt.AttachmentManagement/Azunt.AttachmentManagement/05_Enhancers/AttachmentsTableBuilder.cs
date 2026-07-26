@@ -6,9 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace Azunt.AttachmentManagement;
 
 /// <summary>
-/// Creates a standalone unified Attachments table or safely adds missing
-/// compatibility columns as nullable columns to an existing table.
+/// Creates dbo.Attachments or safely adds missing compatibility columns as nullable columns.
 /// Existing columns, data, defaults, foreign keys, and nullability are not modified.
+/// Index creation is opt-in for existing databases.
 /// </summary>
 public sealed class AttachmentsTableBuilder
 {
@@ -18,6 +18,8 @@ public sealed class AttachmentsTableBuilder
         new("DateCreated", "DATETIMEOFFSET(7)"),
         new("CreatedAt", "DATETIMEOFFSET(7)"),
         new("CreatedBy", "NVARCHAR(70)"),
+        new("ModifiedAt", "DATETIMEOFFSET(7)"),
+        new("ModifiedBy", "NVARCHAR(70)"),
         new("EmployeeID", "BIGINT"),
         new("VendorID", "BIGINT"),
         new("InvestigationID", "BIGINT"),
@@ -34,8 +36,21 @@ public sealed class AttachmentsTableBuilder
         _logger = logger;
     }
 
+    /// <summary>
+    /// Creates or enhances dbo.Attachments without creating optional indexes.
+    /// This overload preserves compatibility with earlier callers.
+    /// </summary>
+    public Task EnsureAsync(
+        string connectionString,
+        CancellationToken cancellationToken = default)
+        => EnsureAsync(connectionString, ensureIndexes: false, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Creates or enhances dbo.Attachments and optionally creates lookup indexes.
+    /// </summary>
     public async Task EnsureAsync(
         string connectionString,
+        bool ensureIndexes,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -58,22 +73,56 @@ public sealed class AttachmentsTableBuilder
             }
         }
 
-        await EnsureIndexAsync(connection, "IX_Attachments_EmployeeID", "EmployeeID", cancellationToken);
-        await EnsureIndexAsync(connection, "IX_Attachments_VendorID", "VendorID", cancellationToken);
-        await EnsureIndexAsync(connection, "IX_Attachments_InvestigationID", "InvestigationID", cancellationToken);
+        if (ensureIndexes)
+        {
+            await EnsureIndexesAsync(connection, cancellationToken);
+        }
 
         _logger.LogInformation(
-            "Attachments table creation/enhancement completed for database {Database}.",
-            connection.Database);
+            "Attachments table creation or enhancement completed for database {Database}. Indexes requested: {EnsureIndexes}.",
+            connection.Database,
+            ensureIndexes);
     }
 
     /// <summary>
-    /// Applies the same safe schema enhancement to an explicit collection of
-    /// database connection strings. The library does not assume any particular
-    /// database catalog or tenant registry table.
+    /// Creates the recommended lookup indexes without changing table columns.
+    /// </summary>
+    public async Task EnsureIndexesAsync(
+        string connectionString,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new ArgumentException("Connection string is required.", nameof(connectionString));
+        }
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        if (!await TableExistsAsync(connection, cancellationToken))
+        {
+            throw new InvalidOperationException("dbo.Attachments must exist before indexes can be created.");
+        }
+
+        await EnsureIndexesAsync(connection, cancellationToken);
+
+        _logger.LogInformation(
+            "Attachments indexes completed for database {Database}.",
+            connection.Database);
+    }
+
+    public Task EnsureDatabasesAsync(
+        IEnumerable<string> connectionStrings,
+        CancellationToken cancellationToken = default)
+        => EnsureDatabasesAsync(connectionStrings, ensureIndexes: false, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Applies the same safe schema operation to an explicit collection of databases.
+    /// The library does not assume a tenant catalog or registry table.
     /// </summary>
     public async Task EnsureDatabasesAsync(
         IEnumerable<string> connectionStrings,
+        bool ensureIndexes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connectionStrings);
@@ -84,7 +133,7 @@ public sealed class AttachmentsTableBuilder
         {
             try
             {
-                await EnsureAsync(connectionString, cancellationToken);
+                await EnsureAsync(connectionString, ensureIndexes, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -120,6 +169,8 @@ public sealed class AttachmentsTableBuilder
                 [DateCreated]     DATETIMEOFFSET(7) NULL,
                 [CreatedAt]       DATETIMEOFFSET(7) NULL,
                 [CreatedBy]       NVARCHAR(70) NULL,
+                [ModifiedAt]      DATETIMEOFFSET(7) NULL,
+                [ModifiedBy]      NVARCHAR(70) NULL,
                 [EmployeeID]      BIGINT NULL,
                 [VendorID]        BIGINT NULL,
                 [InvestigationID] BIGINT NULL,
@@ -168,6 +219,15 @@ public sealed class AttachmentsTableBuilder
             column.SqlType);
     }
 
+    private static async Task EnsureIndexesAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await EnsureIndexAsync(connection, "IX_Attachments_EmployeeID", "EmployeeID", cancellationToken);
+        await EnsureIndexAsync(connection, "IX_Attachments_VendorID", "VendorID", cancellationToken);
+        await EnsureIndexAsync(connection, "IX_Attachments_InvestigationID", "InvestigationID", cancellationToken);
+    }
+
     private static async Task EnsureIndexAsync(
         SqlConnection connection,
         string indexName,
@@ -185,16 +245,24 @@ public sealed class AttachmentsTableBuilder
         checkCommand.Parameters.AddWithValue("@IndexName", indexName);
         var exists = Convert.ToInt32(await checkCommand.ExecuteScalarAsync(cancellationToken)) > 0;
 
-        if (!exists)
+        if (exists)
         {
-            var createSql = $"CREATE NONCLUSTERED INDEX [{indexName}] ON [dbo].[Attachments] ([{columnName}] ASC);";
-            await using var createCommand = new SqlCommand(createSql, connection);
-            await createCommand.ExecuteNonQueryAsync(cancellationToken);
+            return;
         }
+
+        var createSql = $"CREATE NONCLUSTERED INDEX [{indexName}] ON [dbo].[Attachments] ([{columnName}] ASC);";
+        await using var createCommand = new SqlCommand(createSql, connection);
+        await createCommand.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    public static Task RunAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken = default)
+        => RunAsync(services, ensureIndexes: false, cancellationToken: cancellationToken);
 
     public static async Task RunAsync(
         IServiceProvider services,
+        bool ensureIndexes,
         CancellationToken cancellationToken = default)
     {
         using var scope = services.CreateScope();
@@ -207,7 +275,7 @@ public sealed class AttachmentsTableBuilder
             throw new InvalidOperationException("DefaultConnection is not configured.");
         }
 
-        await builder.EnsureAsync(connectionString, cancellationToken);
+        await builder.EnsureAsync(connectionString, ensureIndexes, cancellationToken);
     }
 
     private sealed record ColumnDefinition(string Name, string SqlType);

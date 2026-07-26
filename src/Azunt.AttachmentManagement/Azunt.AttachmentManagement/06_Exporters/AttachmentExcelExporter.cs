@@ -33,6 +33,7 @@ public static class AttachmentExcelExporter
 
             sheetData.Append(CreateRow(
                 "ID", "Active", "DateCreated", "CreatedAt", "CreatedBy",
+                "ModifiedAt", "ModifiedBy",
                 "EmployeeID", "VendorID", "InvestigationID", "FileName",
                 "Discriminator", "Category", "Notes"));
 
@@ -44,6 +45,8 @@ public static class AttachmentExcelExporter
                     FormatDate(item.DateCreated),
                     FormatDate(item.CreatedAt),
                     item.CreatedBy ?? string.Empty,
+                    FormatDate(item.ModifiedAt),
+                    item.ModifiedBy ?? string.Empty,
                     item.EmployeeId?.ToString() ?? string.Empty,
                     item.VendorId?.ToString() ?? string.Empty,
                     item.InvestigationId?.ToString() ?? string.Empty,

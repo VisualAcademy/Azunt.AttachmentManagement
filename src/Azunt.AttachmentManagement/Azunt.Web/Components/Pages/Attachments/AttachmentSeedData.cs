@@ -36,7 +36,7 @@ public static class AttachmentSeedData
             Notes = "Example document linked to an organization record."
         });
 
-        await repository.AddAsync(new AttachmentRecord
+        var reviewDocument = await repository.AddAsync(new AttachmentRecord
         {
             Active = true,
             CreatedBy = "Sample User",
@@ -46,6 +46,13 @@ public static class AttachmentSeedData
             Category = "Supporting Document",
             Notes = "Example document linked to a review record."
         });
+
+        await repository.UpdateMetadataAsync(
+            reviewDocument.Id,
+            reviewDocument.InvestigationId,
+            "Reviewed Document",
+            "Example metadata update demonstrating ModifiedAt and ModifiedBy.",
+            "Sample Reviewer");
 
         await repository.AddAsync(new AttachmentRecord
         {

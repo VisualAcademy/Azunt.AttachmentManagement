@@ -5,6 +5,8 @@ CREATE TABLE [dbo].[Attachments]
     [DateCreated]     DATETIMEOFFSET (7) NULL,
     [CreatedAt]       DATETIMEOFFSET (7) NULL,
     [CreatedBy]       NVARCHAR (70)      NULL,
+    [ModifiedAt]      DATETIMEOFFSET (7) NULL,
+    [ModifiedBy]      NVARCHAR (70)      NULL,
     [EmployeeID]      BIGINT             NULL,
     [VendorID]        BIGINT             NULL,
     [InvestigationID] BIGINT             NULL,

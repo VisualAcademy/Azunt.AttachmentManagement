@@ -6,6 +6,13 @@ namespace Azunt.AttachmentManagement;
 
 public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
 {
+    private const string Columns = """
+        ID, Active, DateCreated, CreatedAt, CreatedBy,
+        ModifiedAt, ModifiedBy,
+        EmployeeID, VendorID, InvestigationID, FileName,
+        Discriminator, Category, Notes
+        """;
+
     private readonly string _defaultConnectionString;
     private readonly ILogger<AttachmentRepositoryAdoNet> _logger;
 
@@ -26,6 +33,8 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
         AttachmentRecord model,
         string? connectionString = null)
     {
+        ArgumentNullException.ThrowIfNull(model);
+
         var now = DateTimeOffset.UtcNow;
         model.Active ??= true;
         model.CreatedAt ??= now;
@@ -35,6 +44,7 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
             INSERT INTO dbo.Attachments
             (
                 Active, DateCreated, CreatedAt, CreatedBy,
+                ModifiedAt, ModifiedBy,
                 EmployeeID, VendorID, InvestigationID,
                 FileName, Discriminator, Category, Notes
             )
@@ -42,6 +52,7 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
             VALUES
             (
                 @Active, @DateCreated, @CreatedAt, @CreatedBy,
+                @ModifiedAt, @ModifiedBy,
                 @EmployeeID, @VendorID, @InvestigationID,
                 @FileName, @Discriminator, @Category, @Notes
             );
@@ -58,17 +69,12 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
 
     public async Task<List<AttachmentRecord>> GetAllAsync(string? connectionString = null)
     {
-        const string sql = """
-            SELECT ID, Active, DateCreated, CreatedAt, CreatedBy,
-                   EmployeeID, VendorID, InvestigationID, FileName,
-                   Discriminator, Category, Notes
-            FROM dbo.Attachments
-            ORDER BY ID DESC;
-            """;
-
         var result = new List<AttachmentRecord>();
         await using var connection = CreateConnection(connectionString);
-        await using var command = new SqlCommand(sql, connection);
+        await using var command = new SqlCommand(
+            $"SELECT {Columns} FROM dbo.Attachments ORDER BY ID DESC;",
+            connection);
+
         await connection.OpenAsync();
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -82,17 +88,12 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
 
     public async Task<AttachmentRecord?> GetByIdAsync(long id, string? connectionString = null)
     {
-        const string sql = """
-            SELECT ID, Active, DateCreated, CreatedAt, CreatedBy,
-                   EmployeeID, VendorID, InvestigationID, FileName,
-                   Discriminator, Category, Notes
-            FROM dbo.Attachments
-            WHERE ID = @ID;
-            """;
-
         await using var connection = CreateConnection(connectionString);
-        await using var command = new SqlCommand(sql, connection);
+        await using var command = new SqlCommand(
+            $"SELECT {Columns} FROM dbo.Attachments WHERE ID = @ID;",
+            connection);
         command.Parameters.Add("@ID", SqlDbType.BigInt).Value = id;
+
         await connection.OpenAsync();
         await using var reader = await command.ExecuteReaderAsync();
         return await reader.ReadAsync() ? Read(reader) : null;
@@ -100,12 +101,15 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
 
     public async Task<bool> UpdateAsync(AttachmentRecord model, string? connectionString = null)
     {
+        ArgumentNullException.ThrowIfNull(model);
+
+        model.ModifiedAt = DateTimeOffset.UtcNow;
+
         const string sql = """
             UPDATE dbo.Attachments SET
                 Active = @Active,
-                DateCreated = @DateCreated,
-                CreatedAt = @CreatedAt,
-                CreatedBy = @CreatedBy,
+                ModifiedAt = @ModifiedAt,
+                ModifiedBy = COALESCE(NULLIF(@ModifiedBy, N''), ModifiedBy),
                 EmployeeID = @EmployeeID,
                 VendorID = @VendorID,
                 InvestigationID = @InvestigationID,
@@ -121,7 +125,17 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
         AddParameters(command, model);
         command.Parameters.Add("@ID", SqlDbType.BigInt).Value = model.Id;
         await connection.OpenAsync();
-        return await command.ExecuteNonQueryAsync() > 0;
+        var changed = await command.ExecuteNonQueryAsync() > 0;
+
+        if (changed)
+        {
+            _logger.LogInformation(
+                "Attachment {AttachmentId} updated through ADO.NET by {ModifiedBy}.",
+                model.Id,
+                model.ModifiedBy);
+        }
+
+        return changed;
     }
 
     public async Task<bool> UpdateMetadataAsync(
@@ -137,7 +151,8 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
                 InvestigationID = @InvestigationID,
                 Category = @Category,
                 Notes = @Notes,
-                CreatedBy = COALESCE(@ModifiedBy, CreatedBy)
+                ModifiedAt = @ModifiedAt,
+                ModifiedBy = COALESCE(NULLIF(@ModifiedBy, N''), ModifiedBy)
             WHERE ID = @ID;
             """;
 
@@ -147,9 +162,21 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
         command.Parameters.Add("@InvestigationID", SqlDbType.BigInt).Value = DbValue(investigationId);
         command.Parameters.Add("@Category", SqlDbType.NVarChar, 100).Value = DbValue(category);
         command.Parameters.Add("@Notes", SqlDbType.NVarChar, -1).Value = DbValue(notes);
+        command.Parameters.Add("@ModifiedAt", SqlDbType.DateTimeOffset).Value = DateTimeOffset.UtcNow;
         command.Parameters.Add("@ModifiedBy", SqlDbType.NVarChar, 70).Value = DbValue(modifiedBy);
+
         await connection.OpenAsync();
-        return await command.ExecuteNonQueryAsync() > 0;
+        var changed = await command.ExecuteNonQueryAsync() > 0;
+
+        if (changed)
+        {
+            _logger.LogInformation(
+                "Attachment {AttachmentId} metadata updated through ADO.NET by {ModifiedBy}.",
+                id,
+                modifiedBy);
+        }
+
+        return changed;
     }
 
     public async Task<bool> DeleteAsync(long id, string? connectionString = null)
@@ -165,65 +192,147 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
         long investigationId,
         string? connectionString = null)
     {
-        var all = await GetAllAsync(connectionString);
-        return all.Where(m => m.InvestigationId == investigationId).ToList();
+        var result = new List<AttachmentRecord>();
+        await using var connection = CreateConnection(connectionString);
+        await using var command = new SqlCommand(
+            $"SELECT {Columns} FROM dbo.Attachments WHERE InvestigationID = @InvestigationID ORDER BY ID DESC;",
+            connection);
+        command.Parameters.Add("@InvestigationID", SqlDbType.BigInt).Value = investigationId;
+
+        await connection.OpenAsync();
+        await using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            result.Add(Read(reader));
+        }
+
+        return result;
     }
 
     public async Task<ArticleSet<AttachmentRecord, long>> GetPagedAsync(
         AttachmentFilterOptions options,
         string? connectionString = null)
     {
-        var query = (await GetAllAsync(connectionString)).AsEnumerable();
+        ArgumentNullException.ThrowIfNull(options);
+
+        var where = new List<string>();
+        var parameterValues = new List<Action<SqlParameterCollection>>();
 
         if (options.EmployeeId.HasValue)
         {
-            query = query.Where(m => m.EmployeeId == options.EmployeeId.Value);
+            where.Add("EmployeeID = @EmployeeID");
+            parameterValues.Add(parameters =>
+                parameters.Add("@EmployeeID", SqlDbType.BigInt).Value = options.EmployeeId.Value);
         }
+
         if (options.VendorId.HasValue)
         {
-            query = query.Where(m => m.VendorId == options.VendorId.Value);
+            where.Add("VendorID = @VendorID");
+            parameterValues.Add(parameters =>
+                parameters.Add("@VendorID", SqlDbType.BigInt).Value = options.VendorId.Value);
         }
+
         if (options.InvestigationId.HasValue)
         {
-            query = query.Where(m => m.InvestigationId == options.InvestigationId.Value);
+            where.Add("InvestigationID = @InvestigationID");
+            parameterValues.Add(parameters =>
+                parameters.Add("@InvestigationID", SqlDbType.BigInt).Value = options.InvestigationId.Value);
         }
+
         if (options.ActiveOnly)
         {
-            query = query.Where(m => m.EffectiveActive);
+            where.Add("ISNULL(Active, 1) = 1");
         }
+
         if (!string.IsNullOrWhiteSpace(options.SearchQuery))
         {
             var keyword = options.SearchQuery.Trim();
-            query = query.Where(m =>
-                Contains(m.FileName, keyword) ||
-                Contains(m.Category, keyword) ||
-                Contains(m.Notes, keyword) ||
-                Contains(m.CreatedBy, keyword) ||
-                Contains(m.Discriminator, keyword));
+            var search = """
+                (FileName LIKE @Search
+                 OR Category LIKE @Search
+                 OR Notes LIKE @Search
+                 OR CreatedBy LIKE @Search
+                 OR ModifiedBy LIKE @Search
+                 OR Discriminator LIKE @Search)
+                """;
+
+            parameterValues.Add(parameters =>
+                parameters.Add("@Search", SqlDbType.NVarChar, -1).Value = $"%{keyword}%");
+
+            if (long.TryParse(keyword, out var numericId))
+            {
+                search = $"({search} OR ID = @NumericID OR EmployeeID = @NumericID OR VendorID = @NumericID OR InvestigationID = @NumericID)";
+                parameterValues.Add(parameters =>
+                    parameters.Add("@NumericID", SqlDbType.BigInt).Value = numericId);
+            }
+
+            where.Add(search);
         }
 
-        query = options.SortOrder switch
-        {
-            "FileName" => query.OrderBy(m => m.FileName),
-            "FileNameDesc" => query.OrderByDescending(m => m.FileName),
-            "Category" => query.OrderBy(m => m.Category),
-            "CategoryDesc" => query.OrderByDescending(m => m.Category),
-            "CreatedAt" => query.OrderBy(m => m.EffectiveCreatedAt),
-            "CreatedAtDesc" => query.OrderByDescending(m => m.EffectiveCreatedAt),
-            "InvestigationId" => query.OrderBy(m => m.InvestigationId),
-            "InvestigationIdDesc" => query.OrderByDescending(m => m.InvestigationId),
-            _ => query.OrderByDescending(m => m.Id)
-        };
-
-        var materialized = query.ToList();
+        var whereSql = where.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", where);
+        var orderBy = GetOrderBy(options.SortOrder);
         var pageSize = Math.Clamp(options.PageSize, 1, 200);
         var pageIndex = Math.Max(0, options.PageIndex);
-        var page = materialized.Skip(pageIndex * pageSize).Take(pageSize).ToList();
-        return new ArticleSet<AttachmentRecord, long>(page, materialized.Count);
+
+        var sql = $"""
+            SELECT COUNT_BIG(1)
+            FROM dbo.Attachments{whereSql};
+
+            SELECT {Columns}
+            FROM dbo.Attachments{whereSql}
+            ORDER BY {orderBy}
+            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+            """;
+
+        await using var connection = CreateConnection(connectionString);
+        await using var command = new SqlCommand(sql, connection);
+
+        foreach (var addParameters in parameterValues)
+        {
+            addParameters(command.Parameters);
+        }
+
+        command.Parameters.Add("@Offset", SqlDbType.Int).Value = pageIndex * pageSize;
+        command.Parameters.Add("@PageSize", SqlDbType.Int).Value = pageSize;
+
+        await connection.OpenAsync();
+        await using var reader = await command.ExecuteReaderAsync();
+
+        long totalCount = 0;
+        if (await reader.ReadAsync())
+        {
+            totalCount = reader.GetInt64(0);
+        }
+
+        var items = new List<AttachmentRecord>();
+        if (await reader.NextResultAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                items.Add(Read(reader));
+            }
+        }
+
+        return new ArticleSet<AttachmentRecord, long>(items, totalCount);
     }
 
-    private static bool Contains(string? value, string keyword)
-        => value?.Contains(keyword, StringComparison.OrdinalIgnoreCase) == true;
+    private static string GetOrderBy(string? sortOrder) => sortOrder switch
+    {
+        "FileName" => "FileName ASC",
+        "FileNameDesc" => "FileName DESC",
+        "Category" => "Category ASC",
+        "CategoryDesc" => "Category DESC",
+        "CreatedAt" => "COALESCE(CreatedAt, DateCreated) ASC",
+        "CreatedAtDesc" => "COALESCE(CreatedAt, DateCreated) DESC",
+        "ModifiedAt" => "ModifiedAt ASC",
+        "ModifiedAtDesc" => "ModifiedAt DESC",
+        "InvestigationId" => "InvestigationID ASC",
+        "InvestigationIdDesc" => "InvestigationID DESC",
+        "Active" => "Active ASC",
+        "ActiveDesc" => "Active DESC",
+        _ => "ID DESC"
+    };
 
     private static object DbValue(object? value) => value ?? DBNull.Value;
 
@@ -233,6 +342,8 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
         command.Parameters.Add("@DateCreated", SqlDbType.DateTimeOffset).Value = DbValue(model.DateCreated);
         command.Parameters.Add("@CreatedAt", SqlDbType.DateTimeOffset).Value = DbValue(model.CreatedAt);
         command.Parameters.Add("@CreatedBy", SqlDbType.NVarChar, 70).Value = DbValue(model.CreatedBy);
+        command.Parameters.Add("@ModifiedAt", SqlDbType.DateTimeOffset).Value = DbValue(model.ModifiedAt);
+        command.Parameters.Add("@ModifiedBy", SqlDbType.NVarChar, 70).Value = DbValue(model.ModifiedBy);
         command.Parameters.Add("@EmployeeID", SqlDbType.BigInt).Value = DbValue(model.EmployeeId);
         command.Parameters.Add("@VendorID", SqlDbType.BigInt).Value = DbValue(model.VendorId);
         command.Parameters.Add("@InvestigationID", SqlDbType.BigInt).Value = DbValue(model.InvestigationId);
@@ -251,13 +362,15 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
             DateCreated = reader.IsDBNull(2) ? null : reader.GetDateTimeOffset(2),
             CreatedAt = reader.IsDBNull(3) ? null : reader.GetDateTimeOffset(3),
             CreatedBy = reader.IsDBNull(4) ? null : reader.GetString(4),
-            EmployeeId = reader.IsDBNull(5) ? null : reader.GetInt64(5),
-            VendorId = reader.IsDBNull(6) ? null : reader.GetInt64(6),
-            InvestigationId = reader.IsDBNull(7) ? null : reader.GetInt64(7),
-            FileName = reader.IsDBNull(8) ? null : reader.GetString(8),
-            Discriminator = reader.IsDBNull(9) ? null : reader.GetString(9),
-            Category = reader.IsDBNull(10) ? null : reader.GetString(10),
-            Notes = reader.IsDBNull(11) ? null : reader.GetString(11)
+            ModifiedAt = reader.IsDBNull(5) ? null : reader.GetDateTimeOffset(5),
+            ModifiedBy = reader.IsDBNull(6) ? null : reader.GetString(6),
+            EmployeeId = reader.IsDBNull(7) ? null : reader.GetInt64(7),
+            VendorId = reader.IsDBNull(8) ? null : reader.GetInt64(8),
+            InvestigationId = reader.IsDBNull(9) ? null : reader.GetInt64(9),
+            FileName = reader.IsDBNull(10) ? null : reader.GetString(10),
+            Discriminator = reader.IsDBNull(11) ? null : reader.GetString(11),
+            Category = reader.IsDBNull(12) ? null : reader.GetString(12),
+            Notes = reader.IsDBNull(13) ? null : reader.GetString(13)
         };
     }
 }
