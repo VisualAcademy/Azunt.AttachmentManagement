@@ -15,7 +15,7 @@ public interface IAttachmentRepository
         string? connectionString = null);
     Task<bool> DeleteAsync(long id, string? connectionString = null);
     Task<List<AttachmentRecord>> GetByInvestigationIdAsync(long investigationId, string? connectionString = null);
-    Task<ArticleSet<AttachmentRecord, long>> GetPagedAsync(
+    Task<PagedResult<AttachmentRecord>> GetPagedAsync(
         AttachmentFilterOptions options,
         string? connectionString = null);
 }

@@ -177,7 +177,7 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
         return items.ToList();
     }
 
-    public async Task<ArticleSet<AttachmentRecord, long>> GetPagedAsync(
+    public async Task<PagedResult<AttachmentRecord>> GetPagedAsync(
         AttachmentFilterOptions options,
         string? connectionString = null)
     {
@@ -251,7 +251,7 @@ public sealed class AttachmentRepositoryDapper : IAttachmentRepository
         using var grid = await connection.QueryMultipleAsync(sql, parameters);
         var count = await grid.ReadSingleAsync<long>();
         var items = (await grid.ReadAsync<AttachmentRecord>()).ToList();
-        return new ArticleSet<AttachmentRecord, long>(items, count);
+        return new PagedResult<AttachmentRecord>(items, count);
     }
 
     private static string GetOrderBy(string? sortOrder) => sortOrder switch

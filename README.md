@@ -7,7 +7,7 @@ Azunt.AttachmentManagement is a reusable .NET 8 module for managing attachment m
 - Unified `AttachmentRecord` model
 - EF Core In-Memory and SQL Server support
 - Dapper and ADO.NET repository implementations
-- Server-side search, filtering, sorting, and paging
+- Server-side search, filtering, sorting, and paging with `PagedResult<T>`
 - Employee, vendor, and investigation relationship metadata
 - Creation and modification audit fields
 - Safe creation or nullable-column enhancement of `dbo.Attachments`
@@ -114,6 +114,10 @@ The package project is configured to create both `.nupkg` and `.snupkg` files.
 ## Security notice
 
 The included `Azunt.Web` project is a development demonstration. Add authentication, authorization, tenant isolation, request validation, secure file storage, file type and size checks, malware scanning, audit logging, and rate limiting before production deployment.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 

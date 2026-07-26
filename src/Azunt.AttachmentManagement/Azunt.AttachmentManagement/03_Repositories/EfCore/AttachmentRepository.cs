@@ -175,7 +175,7 @@ public sealed class AttachmentRepository : IAttachmentRepository
             .ToListAsync();
     }
 
-    public async Task<ArticleSet<AttachmentRecord, long>> GetPagedAsync(
+    public async Task<PagedResult<AttachmentRecord>> GetPagedAsync(
         AttachmentFilterOptions options,
         string? connectionString = null)
     {
@@ -196,7 +196,7 @@ public sealed class AttachmentRepository : IAttachmentRepository
             .Take(pageSize)
             .ToListAsync();
 
-        return new ArticleSet<AttachmentRecord, long>(items, totalCount);
+        return new PagedResult<AttachmentRecord>(items, totalCount);
     }
 
     private static IQueryable<AttachmentRecord> ApplyFilters(

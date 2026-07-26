@@ -210,7 +210,7 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
         return result;
     }
 
-    public async Task<ArticleSet<AttachmentRecord, long>> GetPagedAsync(
+    public async Task<PagedResult<AttachmentRecord>> GetPagedAsync(
         AttachmentFilterOptions options,
         string? connectionString = null)
     {
@@ -314,7 +314,7 @@ public sealed class AttachmentRepositoryAdoNet : IAttachmentRepository
             }
         }
 
-        return new ArticleSet<AttachmentRecord, long>(items, totalCount);
+        return new PagedResult<AttachmentRecord>(items, totalCount);
     }
 
     private static string GetOrderBy(string? sortOrder) => sortOrder switch

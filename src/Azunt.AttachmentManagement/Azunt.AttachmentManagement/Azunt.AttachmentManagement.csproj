@@ -10,7 +10,7 @@
     <Description>Reusable .NET attachment metadata CRUD module for general business applications. Supports EF Core In-Memory, SQL Server, Dapper, ADO.NET, safe schema enhancement, audit metadata, related-record metadata, and Open XML Excel export.</Description>
     <PackageTags>Azunt;attachment;file;metadata;audit;investigation;employee;vendor;EFCore;InMemory;Dapper;ADO.NET;Blazor;SQLServer;OpenXML</PackageTags>
     <Authors>VisualAcademy</Authors>
-    <Company>Hawaso</Company>
+    <Company>VisualAcademy</Company>
     <Copyright>Copyright © 2026 VisualAcademy</Copyright>
 
     <PackageProjectUrl>https://github.com/VisualAcademy/Azunt.AttachmentManagement</PackageProjectUrl>

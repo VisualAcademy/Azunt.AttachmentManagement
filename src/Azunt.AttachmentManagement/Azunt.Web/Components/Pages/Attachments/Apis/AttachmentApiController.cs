@@ -15,7 +15,7 @@ public class AttachmentApiController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<ArticleSet<AttachmentRecord, long>>> GetPaged(
+    public async Task<ActionResult<PagedResult<AttachmentRecord>>> GetPaged(
         [FromQuery] int pageIndex = 0,
         [FromQuery] int pageSize = 20,
         [FromQuery] string searchQuery = "",
